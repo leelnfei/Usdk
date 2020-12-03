@@ -25,12 +25,17 @@ call :InitPlatformConfig
 call :GenGradleProperties
 call :ReadySdkRes
 cd %gradlebuildTemp%
-call %gradle% assembleRelease --stacktrace
+::call %gradle% assembleRelease --stacktrace
+call gradlew assembleRelease --stacktrace
 pause
 goto :eof
 
 ::==================================================================================
 :ShowMenu
+echo 由于百度SDK和其他的插件或者渠道SDK都太老，打出来的包会崩溃，就不要打我以前适配的渠道包了，看下示例怎么适配然后自己适配自己的渠道就行。
+echo 要想看打包后的运行usdk运行情况，请打none(裸包)渠道
+echo.
+
 echo.
 echo :Main
 echo -----------------------------------
@@ -140,8 +145,11 @@ set alias=%result%
 call :ReadIni %storePath% keystore keypass
 set keypass=%result%
  
-set keystorePath=%~dp0sdk/keystore
-set keystorePath=%keystorePath:\=/%
+set keystoreRootPath=%~dp0sdk/keystore
+set keystoreRootPath=%keystoreRootPath:\=/%
+set	keystorePath=%keystoreRootPath%/%keystorename%
+copy %keystoreRootPath:/=\%\%keystorename% %UnityProjectDir:/=\%
+
 echo VersionName=%versionName%>%gradle_properties%
 echo VersionCode=%versionCode%>>%gradle_properties%
 echo Package=%package%>>%gradle_properties%
@@ -149,7 +157,7 @@ echo AppName=%appname%>>%gradle_properties%
 echo UnityProjectType=%UnityProjectType%>>%gradle_properties%
 echo JavaVersion=%JavaVersion%>>%gradle_properties%
 echo AppReleaseDir=./outputs/apk>>%gradle_properties%
-echo Keystore=%keystorePath%/%keystorename%>>%gradle_properties%
+echo Keystore=%keystorename%>>%gradle_properties%
 echo StorePassword=%storepass%>>%gradle_properties%
 echo KeyAlias=%alias%>>%gradle_properties%
 echo KeyPassword=%keypass%>>%gradle_properties%
@@ -168,7 +176,7 @@ set SdkDir=%result%
 call :ReadIni %global_properties% AndroidSdk ndk.dir
 set NdkDir=%result%
 echo sdk.dir=%SdkDir%>%local_properties%
-echo ndk.dir=%NdkDir%>>%local_properties%
+rem echo ndk.dir=%NdkDir%>>%local_properties%
 
 rem settings.gradle
 echo include ':app'>%settings_gradle%
@@ -217,7 +225,7 @@ goto :eof
 ::==================================================================================
 :ReadySdkRes
 ::修改appName
-call .\tools\assetconfigtool\ModifyAppName.bat %appNameXmlPath% app_name %appname%
+call .\tools\assetconfigtool\ModifyAppName.bat %appNameXmlPath% app_name "%appname%"
 
 ::构建临时module用于不同渠道构建差异资源
 mkdir %gradlebuildTemp%\app

@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Xml;
 using UnityEditor;
 using UnityEngine;
-using System.IO;
 using Object = UnityEngine.Object;
 
 public class BuildiOS : Editor
@@ -51,7 +51,7 @@ public class BuildiOS : Editor
             else if (arg.StartsWith("versionCode", StringComparison.OrdinalIgnoreCase))
             {
                 versionCode = arg.Split('=')[1];
-                PlayerSettings.bundleVersion = versionCode;
+                PlayerSettings.iOS.buildNumber = versionCode;
             }
             else if (arg.StartsWith("buildType", StringComparison.OrdinalIgnoreCase))
                 buildType = arg.Split('=')[1];
@@ -71,8 +71,9 @@ public class BuildiOS : Editor
                 xcodeOut = arg.Split('=')[1];
         }
 
-        PlayerSettings.iOS.targetDevice = iOSTargetDevice.iPhoneAndiPad;//目标设备
-        PlayerSettings.iOS.targetOSVersionString = "8.0";//最低iOS版本要求
+        PlayerSettings.iOS.appleEnableAutomaticSigning = false;
+        PlayerSettings.iOS.targetDevice = iOSTargetDevice.iPhoneAndiPad; //目标设备
+        PlayerSettings.iOS.targetOSVersionString = "8.0"; //最低iOS版本要求
         PlayerSettings.iOS.statusBarStyle = iOSStatusBarStyle.Default;
         PlayerSettings.statusBarHidden = true;
         PlayerSettings.allowedAutorotateToLandscapeLeft = true;
@@ -80,11 +81,9 @@ public class BuildiOS : Editor
         PlayerSettings.allowedAutorotateToPortrait = false;
         PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
         PlayerSettings.accelerometerFrequency = 30;
-        PlayerSettings.apiCompatibilityLevel = ApiCompatibilityLevel.NET_2_0_Subset;
-        PlayerSettings.defaultIsFullScreen = true;
-        PlayerSettings.targetIOSGraphics = TargetIOSGraphics.Automatic;
-        PlayerSettings.SetPropertyInt ("ScriptingBackend", (int)ScriptingImplementation.IL2CPP, BuildTargetGroup.iOS);
-        PlayerSettings.SetPropertyInt ("Architecture", (int)iOSTargetDevice.iPhoneAndiPad, BuildTargetGroup.iOS);//支持armv7和arm64
+        PlayerSettings.SetApiCompatibilityLevel(BuildTargetGroup.iOS, ApiCompatibilityLevel.NET_Standard_2_0);
+        PlayerSettings.SetPropertyInt("ScriptingBackend", (int)ScriptingImplementation.IL2CPP, BuildTargetGroup.iOS);
+        PlayerSettings.SetPropertyInt("Architecture", (int)iOSTargetDevice.iPhoneAndiPad, BuildTargetGroup.iOS); //支持armv7和arm64
         PlayerSettings.iOS.requiresPersistentWiFi = true;
         string build_time = string.Format("{0}{1}{2}{3}{4}", DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, DateTime.Now.Hour, DateTime.Now.Minute);
         BuildPipeline.BuildPlayer(GetBuildScenes(), xcodeOut, BuildTarget.iOS, BuildOptions.None);

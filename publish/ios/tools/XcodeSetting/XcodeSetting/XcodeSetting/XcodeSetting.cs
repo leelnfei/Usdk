@@ -1,7 +1,7 @@
-﻿using System.Collections;
-using System.IO;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
-using System;
+using System.IO;
 
 namespace UnityEditor.iOS.Xcode.Custom
 {
@@ -13,8 +13,21 @@ namespace UnityEditor.iOS.Xcode.Custom
             pluginPath = configPath.Replace("XcodeSetting.json", "");
             string projPath = PBXProject.GetPBXProjectPath(xcodePath);
             PBXProject proj = new PBXProject();
-
             proj.ReadFromString(File.ReadAllText(projPath));
+
+            string plistPath = xcodePath + "/Info.plist";
+            PlistDocument plist = new PlistDocument();
+            plist.ReadFromString(File.ReadAllText(plistPath));
+            PlistElementDict rootDict = plist.root;
+
+            string productName = "usdk";
+            string target = proj.TargetGuidByName(PBXProject.GetUnityTargetName());
+            List<string> names = proj.GetBuildProperty(target, "PRODUCT_NAME");
+            if (names.Count > 0)
+                productName = names[0];
+            string entitlementFilePath = Path.Combine(PBXProject.GetUnityTargetName(), productName + ".entitlements");
+            ProjectCapabilityManager pcbManager = new ProjectCapabilityManager(projPath, entitlementFilePath, PBXProject.GetUnityTargetName());
+
             //读取配置文件
             string json = File.ReadAllText(configPath);
             Hashtable table = json.hashtableFromJson();
@@ -31,16 +44,12 @@ namespace UnityEditor.iOS.Xcode.Custom
             CopyFolders(proj, xcodePath, table.SGet<Hashtable>("folders"));
             //文件编译符号
             SetFilesCompileFlag(proj, table.SGet<Hashtable>("filesCompileFlag"));
+            //加入能力
+            SetCapabilitys(pcbManager, table.SGet<Hashtable>("capabilitys"));
             //写入
             File.WriteAllText(projPath, proj.WriteToString());
             //plist
-            string plistPath = xcodePath + "/Info.plist";
-            PlistDocument plist = new PlistDocument();
-            plist.ReadFromString(File.ReadAllText(plistPath));
-            PlistElementDict rootDict = plist.root;
-
             SetPlist(proj, rootDict, table.SGet<Hashtable>("plist"));
-            //写入
             plist.WriteToFile(plistPath);
         }
 
@@ -254,7 +263,7 @@ namespace UnityEditor.iOS.Xcode.Custom
             {
                 File.Copy(src, des);
                 string target = proj.TargetGuidByName(PBXProject.GetUnityTargetName());
-                 // The path is relative to the source folder
+                // The path is relative to the source folder
                 string relativePath = des.Replace(xcodePath + "/", "");
                 proj.AddFileToBuild(target, proj.AddFile(relativePath, relativePath, PBXSourceTree.Source));
                 AutoAddSearchPath(proj, xcodePath, des);
@@ -265,7 +274,7 @@ namespace UnityEditor.iOS.Xcode.Custom
         private static void CopyFolder(string srcPath, string dstPath)
         {
             if (Directory.Exists(dstPath))
-                Directory.Delete(dstPath,true);
+                Directory.Delete(dstPath, true);
             if (File.Exists(dstPath))
                 File.Delete(dstPath);
 
@@ -333,7 +342,7 @@ namespace UnityEditor.iOS.Xcode.Custom
         private static void AutoAddSearchPath(PBXProject proj, string xcodePath, string filePath)
         {
             if (filePath.EndsWith(".framework"))
-            {//添加框架搜索路径
+            { //添加框架搜索路径
                 string addStr = "$PROJECT_DIR" + Path.GetDirectoryName(filePath.Replace(xcodePath, ""));
                 Hashtable arg = new Hashtable();
                 Hashtable add = new Hashtable();
@@ -346,7 +355,7 @@ namespace UnityEditor.iOS.Xcode.Custom
                 SetBuildProperties(proj, arg);
             }
             else if (filePath.EndsWith(".h"))
-            {//添加头文件搜索路径
+            { //添加头文件搜索路径
                 string addStr = "$PROJECT_DIR" + Path.GetDirectoryName(filePath.Replace(xcodePath, ""));
                 Hashtable arg = new Hashtable();
                 Hashtable add = new Hashtable();
@@ -359,7 +368,7 @@ namespace UnityEditor.iOS.Xcode.Custom
                 SetBuildProperties(proj, arg);
             }
             else if (filePath.EndsWith(".a"))
-            {//添加静态库搜索路径
+            { //添加静态库搜索路径
                 string addStr = "$PROJECT_DIR" + Path.GetDirectoryName(filePath.Replace(xcodePath, ""));
                 Hashtable arg = new Hashtable();
                 Hashtable add = new Hashtable();
@@ -391,6 +400,123 @@ namespace UnityEditor.iOS.Xcode.Custom
                     list.Add(flag.ToString());
                 }
                 proj.SetCompileFlagsForFile(target, fguid, list);
+            }
+        }
+
+        /// <summary>
+        /// 设置能力
+        /// </summary>
+        /// <param name="proj"></param>
+        /// <param name="arg"></param>
+        private static void SetCapabilitys(ProjectCapabilityManager pcbManager, Hashtable arg)
+        {
+            if (arg == null)
+                return;
+            foreach (DictionaryEntry i in arg)
+            {
+                string capabilityName = i.Key.ToString();
+                ArrayList args = i.Value as ArrayList;
+                AddCapabilitys(pcbManager, capabilityName, args.ToArray());
+                Console.WriteLine(string.Format("Add '{0}' Capability.", capabilityName));
+            }
+            pcbManager.WriteToFile();
+            Console.WriteLine(string.Format("Add {0} Capabilitys Success.", arg.Count));
+        }
+
+        private static void AddCapabilitys(ProjectCapabilityManager pcbManager, string capabilityName, object[] args)
+        {
+            switch (capabilityName)
+            {
+                case "ApplePay":
+                    pcbManager.AddApplePay(args as string[]);
+                    break;
+                case "AppGroups":
+                    pcbManager.AddAppGroups(args as string[]);
+                    break;
+                case "AssociatedDomains":
+                    pcbManager.AddAssociatedDomains(args as string[]);
+                    break;
+                case "BackgroundModes":
+                    BackgroundModesOptions ops = BackgroundModesOptions.None;
+                    string[] pars = args as string[];
+                    foreach (string op in pars)
+                    {
+                        BackgroundModesOptions bmop;
+                        if (Enum.TryParse(op, out bmop))
+                            ops = ops | bmop;
+                    }
+                    pcbManager.AddBackgroundModes(ops);
+                    break;
+                case "DataProtection":
+                    pcbManager.AddDataProtection();
+                    break;
+                case "GameCenter":
+                    pcbManager.AddGameCenter();
+                    break;
+                case "HealthKit":
+                    pcbManager.AddHealthKit();
+                    break;
+                case "HomeKit":
+                    pcbManager.AddHomeKit();
+                    break;
+                case "iCloud":
+                    bool enableKeyValueStorage = Convert.ToBoolean(args[0]);
+                    bool enableiCloudDocument = Convert.ToBoolean(args[1]);
+                    List<string> customContainers = new List<string>();
+                    if (args.Length > 2)
+                    {
+                        for (int i = 2; i < args.Length - 1; i++)
+                        {
+                            customContainers.Add(args[i].ToString());
+                        }
+                    }
+                    pcbManager.AddiCloud(enableKeyValueStorage, enableiCloudDocument, customContainers.ToArray());
+                    break;
+                case "InAppPurchase":
+                    pcbManager.AddInAppPurchase();
+                    break;
+                case "InterAppAudio":
+                    pcbManager.AddInterAppAudio();
+                    break;
+                case "KeychainSharing":
+                    pcbManager.AddKeychainSharing(args as string[]);
+                    break;
+                case "Maps":
+                    MapsOptions mops = MapsOptions.None;
+                    string[] mopars = args as string[];
+                    foreach (string op in mopars)
+                    {
+                        MapsOptions mop;
+                        if (Enum.TryParse(op, out mop))
+                            mops = mops | mop;
+                    }
+                    pcbManager.AddMaps(mops);
+                    break;
+                case "PersonalVPN":
+                    pcbManager.AddPersonalVPN();
+                    break;
+                case "PushNotifications":
+                    bool development = Convert.ToBoolean(args[0]);
+                    pcbManager.AddPushNotifications(development);
+                    break;
+                case "Siri":
+                    pcbManager.AddSiri();
+                    break;
+                case "Wallet":
+                    pcbManager.AddWallet(args as string[]);
+                    break;
+                case "WirelessAccessoryConfiguration":
+                    pcbManager.AddWirelessAccessoryConfiguration();
+                    break;
+                case "SignInWithApple":
+                    pcbManager.AddSignInWithApple();
+                    break;
+                case "AccessWiFiInformation":
+                    pcbManager.AddAccessWiFiInformation();
+                    break;
+                case "AutoFillCredentialProvider":
+                    pcbManager.AddAutoFillCredentialProvider();
+                    break;
             }
         }
 
